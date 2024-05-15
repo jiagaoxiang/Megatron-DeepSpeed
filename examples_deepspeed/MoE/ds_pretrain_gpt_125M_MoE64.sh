@@ -3,17 +3,17 @@ DIR=`pwd`
 ###############################################################################
 ### Main configs
 ## GPT-3 models use 2K sequence length/context window
-SEQ_LEN=2048
+SEQ_LEN=512
 
 ### The "GPT-3 XXX" below are configs from GPT-3 paper
 ### https://arxiv.org/abs/2005.14165, choose based on
 ### your desired model size or build your own configs
 
-## GPT-3 Small 125M
-MODEL_SIZE=0.125
-NUM_LAYERS=12
+## nanoGPT
+MODEL_SIZE=0.125 ##This value has no impact on the training, just used as file path name.
+NUM_LAYERS=8
 HIDDEN_SIZE=768
-NUM_ATTN_HEADS=12
+NUM_ATTN_HEADS=8
 GLOBAL_BATCH_SIZE=256
 # LR=6.0e-4
 # MIN_LR=6.0e-5
@@ -113,15 +113,15 @@ LR_DECAY_TOKENS=300000000000
 BATCH_SIZE=4
 
 ## Model parallelism, 1 is no MP
-MP_SIZE=1
+MP_SIZE=2
 
 ## Pipeline parallelism
 ## Currently we don't support PP for MoE. To disable PP, set PP_SIZE
 ## to 1 and use the "--no-pipeline-parallel" arg.
 PP_SIZE=1
-NUM_GPUS=$(($(ds_ssh nvidia-smi --query-gpu=name --format=csv,noheader | wc -l)-2))
-NUM_GPUS_PERNODE=$(nvidia-smi --query-gpu=name --format=csv,noheader | wc -l)
-NUM_NODE=$(( ${NUM_GPUS} / ${NUM_GPUS_PERNODE} ))
+NUM_GPUS=8
+NUM_GPUS_PERNODE=8
+NUM_NODE=1
 ###############################################################################
 ### MoE configs
 ## Number of experts. EP_SIZE 1 means dense model without MoE
@@ -170,8 +170,8 @@ CL_STEP=$(( ${CL_TOKENS} / (${GLOBAL_BATCH_SIZE} * ${CL_AVG_SEQLEN}) ))
 ### Misc configs
 LOG_INTERVAL=10
 EVAL_ITERS=10
-EVAL_INTERVAL=100
-SAVE_INTERVAL=10000
+EVAL_INTERVAL=10
+SAVE_INTERVAL=100
 
 ## Standard deviation for weight initialization
 ## We used 0.014 for 350M/1.3B dense/MoE models, and used 0.01 for 6.7B
@@ -241,26 +241,28 @@ if [ "${USE_INTERNAL_DATA}" = "true" ]; then
     0.00208 ${NIH} 0.13017 ${CC2020} 0.09446 ${PCC} 0.15652 ${CC2021} \
     0.01359 ${ARX} 0.01588 ${GIT}"
 else
-    VOCAB_PATH=/data/the_pile_public_merged_nopreprocessing/gpt2-vocab.json
-    MERGE_PATH=/data/the_pile_public_merged_nopreprocessing/gpt2-merges.txt
+    VOCAB_PATH=/dataset/gpt2-vocab.json
+    MERGE_PATH=/dataset/gpt2-merges.txt
     # Public the Pile dataset, can be downloaded at https://mystic.the-eye.eu/public/AI/pile_neox/
     # For cluster Azure-EastUS-V100-32GB-4, Lab-RR1-V100
-    DATA_PATH=/vc_data_blob/users/conglli/the_pile_public_merged_nopreprocessing/pile_text_document
+    DATA_PATH=/dataset/my-gpt2_text_document #my-gpt2_text_document is regenerated from Oscar dataset.
     # For cluster Azure-WestUS3-A100
     # DATA_PATH=/blob/data/the_pile_public_merged_nopreprocessing/pile_text_document
 fi
 ###############################################################################
 data_options=" \
-         --vocab-file ${VOCAB_PATH} \
-         --merge-file ${MERGE_PATH} \
-         --data-path ${DATA_PATH} \
+         --vocab-file ${dir}/../..${VOCAB_PATH} \
+         --merge-file ${dir}/../..${MERGE_PATH} \
+         --data-path ${dir}/../..${DATA_PATH} \
          --data-impl mmap"
         
 megatron_options=" \
+        --no-gradient-accumulation-fusion \
         --override-opt_param-scheduler \
         --adam-beta1 0.9 \
         --adam-beta2 0.95 \
         --tensor-model-parallel-size ${MP_SIZE} \
+        --sequence-parallel \
         --moe-expert-parallel-size ${EP_PARALLEL_SIZE} \
         --num-experts ${EP_SIZE} \
         --moe-loss-coeff ${MLC} \
@@ -281,6 +283,7 @@ megatron_options=" \
         --train-tokens ${TRAIN_TOKENS} \
         --train-iters ${TRAIN_ITERS} \
         --lr ${LR} \
+        --use-flash-attn \
         --min-lr ${MIN_LR} \
         --lr-decay-style cosine \
         --split 98,2,0 \
