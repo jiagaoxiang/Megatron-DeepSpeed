@@ -251,9 +251,9 @@ else
 fi
 ###############################################################################
 data_options=" \
-         --vocab-file ${dir}/../..${VOCAB_PATH} \
-         --merge-file ${dir}/../..${MERGE_PATH} \
-         --data-path ${dir}/../..${DATA_PATH} \
+         --vocab-file ../..${VOCAB_PATH} \
+         --merge-file ../..${MERGE_PATH} \
+         --data-path ../..${DATA_PATH} \
          --data-impl mmap"
         
 megatron_options=" \
